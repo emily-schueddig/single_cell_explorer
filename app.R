@@ -4,6 +4,7 @@ options(shiny.maxRequestSize = 8000*1024^3)
 suppressPackageStartupMessages({
   library(shiny)
   library(shinycssloaders)
+  library(shinythemes)
   library(Seurat)
   library(ggplot2)
   library(plotly)
@@ -63,71 +64,102 @@ last_plot_env <- new.env(parent = emptyenv())
 set_last_plot <- function(p, key) assign(key, p, envir = last_plot_env)
 get_last_plot <- function(key) get(key, envir = last_plot_env, inherits = FALSE)
 
-# ---------- UI ----------
+# Define UI ------------------------------------------------------------- 
 ui <- fluidPage(
-  titlePanel("scRNA-seq Explorer"),
-  sidebarLayout(
-    sidebarPanel(
-      width = 3,
-      fileInput("seurat_file", "Upload Seurat Object", accept = c(".rds",".RData")),
-      tags$hr(),
-    ),
-    mainPanel(
-      width = 9,
-      tabsetPanel(
-        tabPanel("Overview",
-                 fluidRow(
-                   column(3, wellPanel(h4("Cells"), uiOutput("nCells"))),
-                   column(3, wellPanel(h4("Genes"), uiOutput("nGenes"))),
-                   column(3, wellPanel(h4("Assays"), uiOutput("nAssays"))),
-                   column(3, wellPanel(h4("Reductions"), uiOutput("nReductions")))
-                 ),
-                 tags$hr(),
-                 h4("Metadata preview"),
-                 DTOutput("meta_preview") %>% withSpinner()
+  theme = shinytheme("flatly"),
+  # Create navigation bar -----------------------------------------------
+  navbarPage(
+    title = "Single-cell Explorer",
+    # Create app section -----------------------------------------------
+    tabPanel(
+      "Explore the Data",
+      titlePanel(h1("Explore the Data")),
+      sidebarLayout(
+        # Side bar ------------------------------------------------------------
+        sidebarPanel(
+          width = 3,
+          fileInput(
+            "seurat_file",
+            "Upload Seurat Object",
+            accept = c(".rds", ".RData")
+          ),
+          tags$hr()
         ),
-        tabPanel("Reductions",
-                 uiOutput("dimplot_reduction_ui"),
-                 uiOutput("dimplot_group_ui"),
-                 uiOutput("dimplot_splitby_ui"),
-                 plotOutput("dimplot_reduction", height = "600px") %>% withSpinner(),
-                 downloadButton("download_dimplot", "Download DimPlot")
-        ),
-        tabPanel("Feature Plot",
-                 uiOutput("featureplot_gene_ui"),
-                 uiOutput("featureplot_reduction_ui"),
-                 uiOutput("featureplot_splitby_ui"),
-                 plotOutput("feature_plot", height = "600px") %>% withSpinner(),
-                 downloadButton("download_feature_plot", "Download FeaturePlot")
-        ),
-        tabPanel("Cluster Composition",
-                 uiOutput("comp_group_ui"),
-                 uiOutput("comp_stack_ui"),
-                 plotlyOutput("composition_plot") %>% withSpinner(),
-                 downloadButton("download_comp_plot", "Download composition plot")
-        ),
-        tabPanel("Gene Violins",
-                 textInput("genes_violin", "Genes (comma-separated)", value = ""),
-                 uiOutput("violin_group_ui"),  # <-- Add this
-                 plotlyOutput("gene_violin_plot") %>% withSpinner(),
-                 downloadButton("download_gene_violin", "Download gene violins"),
-                 tags$hr(),
-                 DTOutput("gene_violin_summary") %>% withSpinner()
-        ),
-        tabPanel("Filtered Gene Violins",
-                 uiOutput("filter_var_ui"),
-                 uiOutput("filter_value_ui"),  # renamed to reflect single value
-                 uiOutput("filtered_violin_group_ui"),
-                 textInput("filtered_genes", "Genes (comma-separated)", value = ""),
-                 plotlyOutput("filtered_violin_plot") %>% withSpinner(),
-                 downloadButton("download_filtered_violins", "Download violin plot"),
-                 tags$hr(),
-                 DTOutput("filtered_violin_summary") %>% withSpinner()
+        
+        mainPanel(
+          width = 9,
+          
+          tabsetPanel(
+            
+            tabPanel(
+              "Overview",
+              fluidRow(
+                column(3, wellPanel(h4("Cells"), uiOutput("nCells"))),
+                column(3, wellPanel(h4("Genes"), uiOutput("nGenes"))),
+                column(3, wellPanel(h4("Assays"), uiOutput("nAssays"))),
+                column(3, wellPanel(h4("Reductions"), uiOutput("nReductions")))
+              ),
+              tags$hr(),
+              h4("Metadata preview"),
+              DTOutput("meta_preview") %>% withSpinner()
+            ),
+            
+            tabPanel(
+              "Reductions",
+              uiOutput("dimplot_reduction_ui"),
+              uiOutput("dimplot_group_ui"),
+              uiOutput("dimplot_splitby_ui"),
+              plotOutput("dimplot_reduction", height = "600px") %>% withSpinner(),
+              downloadButton("download_dimplot", "Download DimPlot")
+            ),
+            
+            tabPanel(
+              "Feature Plot",
+              uiOutput("featureplot_gene_ui"),
+              uiOutput("featureplot_reduction_ui"),
+              uiOutput("featureplot_splitby_ui"),
+              plotOutput("feature_plot", height = "600px") %>% withSpinner(),
+              downloadButton("download_feature_plot", "Download FeaturePlot")
+            ),
+            
+            tabPanel(
+              "Cluster Composition",
+              uiOutput("comp_group_ui"),
+              uiOutput("comp_stack_ui"),
+              plotlyOutput("composition_plot") %>% withSpinner(),
+              downloadButton("download_comp_plot", "Download composition plot")
+            ),
+            
+            tabPanel(
+              "Gene Violins",
+              textInput("genes_violin", "Genes (comma-separated)", value = ""),
+              uiOutput("violin_group_ui"),
+              plotlyOutput("gene_violin_plot") %>% withSpinner(),
+              downloadButton("download_gene_violin", "Download gene violins"),
+              tags$hr(),
+              DTOutput("gene_violin_summary") %>% withSpinner()
+            ),
+            
+            tabPanel(
+              "Filtered Gene Violins",
+              uiOutput("filter_var_ui"),
+              uiOutput("filter_value_ui"),
+              uiOutput("filtered_violin_group_ui"),
+              textInput("filtered_genes", "Genes (comma-separated)", value = ""),
+              plotlyOutput("filtered_violin_plot") %>% withSpinner(),
+              downloadButton("download_filtered_violins", "Download violin plot"),
+              tags$hr(),
+              DTOutput("filtered_violin_summary") %>% withSpinner()
+            )
+            
+          )
         )
       )
     )
   )
 )
+
+
 
 # ---------- Server ----------
 server <- function(input, output, session) {
