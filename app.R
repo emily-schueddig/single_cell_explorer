@@ -12,6 +12,7 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(stringr)
   library(patchwork)
+  library(pals)
 })
 
 # ---------- Utilities ----------
@@ -74,6 +75,8 @@ ui <- fluidPage(
     tabPanel(
       "Explore the Data",
       titlePanel(h1("Explore the Data")),
+      p(strong("Author:"), " Emily Schueddig | Department of Biostatistics & Data Science, University of Kansas Medical Center"),
+      p(strong("Email:"), " eschueddig@kumc.edu"),
       sidebarLayout(
         # Side bar ------------------------------------------------------------
         sidebarPanel(
@@ -155,11 +158,13 @@ ui <- fluidPage(
           )
         )
       )
+    ),
+    tabPanel(
+      "Analyze the Data",
+      titlePanel(h1("Analyze the Data"))
     )
   )
 )
-
-
 
 # ---------- Server ----------
 server <- function(input, output, session) {
@@ -176,8 +181,8 @@ server <- function(input, output, session) {
       # Update UI choices
       updateSelectInput(session, "assay", choices = available_assays(obj), selected = DefaultAssay(obj))
       reds <- available_reductions(obj)
-      sel_red <- if ("umap" %in% reds) "umap" else if (length(reds) > 0) reds[[1]] else NULL
-      updateSelectInput(session, "reduction", choices = reds, selected = sel_red)
+      # sel_red <- if ("umap" %in% reds) "umap" else if (length(reds) > 0) reds[[1]] else NULL
+      updateSelectInput(session, "dimplot_reduction", choices = reds, selected = NULL)
       md <- obj@meta.data
       cat_cols <- cat_meta_cols(obj)
       default_group <- if ("seurat_clusters" %in% colnames(md)) "seurat_clusters" else ""
@@ -198,7 +203,7 @@ server <- function(input, output, session) {
     req(seurat_obj())
     selectInput("dimplot_reduction", "Dimensional Reduction",
                 choices = available_reductions(seurat_obj()),
-                selected = "umap")
+                selected = NULL)
   })
   
   output$dimplot_group_ui <- renderUI({
@@ -309,8 +314,7 @@ server <- function(input, output, session) {
                  reduction = input$dimplot_reduction,
                  group.by = input$dimplot_group,
                  split.by = split_var,
-                 pt.size = 1, ncol=2, label = T) &
-      theme_minimal()
+                 pt.size = 1, ncol=2, label = T)
     
     set_last_plot(p, "dimplot_raw")
     print(p)
@@ -379,12 +383,20 @@ server <- function(input, output, session) {
       mutate(pct = n / sum(n)) %>%
       ungroup()
     
+    fill_levels <- unique(df$.s)
+    
+    colors <- setNames(
+      pals::glasbey(length(fill_levels)),
+      fill_levels
+    )
+    
     p <- ggplot(df, aes(x = .g, y = pct, fill = .s)) +
       geom_bar(stat = "identity") +
       ylab("Proportion") + xlab(grp) +
       theme_minimal() +
       scale_y_continuous(labels = scales::percent_format()) +
-      labs(fill = ifelse(is.null(stk), "", stk))
+      labs(fill = ifelse(is.null(stk), "", stk)) +
+      scale_fill_manual(values = colors)
     set_last_plot(p, "comp_raw")
     ggplotly(p)
   })
