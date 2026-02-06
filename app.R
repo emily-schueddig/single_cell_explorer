@@ -1,3 +1,9 @@
+#################################################
+# Title: Single Cell Explorer
+# Author: Emily Schueddig
+# Date: 2/6/2026
+#################################################
+
 # app.R
 options(shiny.maxRequestSize = 8000*1024^3)
 
