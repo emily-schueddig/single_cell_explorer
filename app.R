@@ -1,4 +1,6 @@
 # app.R
+# Rachel's edit
+
 options(shiny.maxRequestSize = 8000*1024^3)
 
 suppressPackageStartupMessages({
