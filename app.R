@@ -1,7 +1,8 @@
 #################################################
 # Title: Single Cell Explorer
-# Author: Emily Schueddig
+# Author: Emily Schueddig and Allison Makovec
 # Date: 2/6/2026
+# Last modified: 2/11/2026
 #################################################
 
 # app.R
