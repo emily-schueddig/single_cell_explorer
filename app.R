@@ -7,6 +7,7 @@
 #Changes example
 
 ## Example text changes
+# more chang4w
 
 # app.R
 options(shiny.maxRequestSize = 8000*1024^3)
