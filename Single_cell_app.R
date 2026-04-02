@@ -2,12 +2,8 @@
 # Title: Single Cell Explorer
 # Author: Emily Schueddig and Allison Makovec
 # Date: 2/6/2026
-# Last modified: 2/11/2026
+# Last modified: 4/2/2026
 #################################################
-#Changes example
-
-## Example text change
-
 # app.R
 options(shiny.maxRequestSize = 8000*1024^3)
 
@@ -85,8 +81,8 @@ ui <- fluidPage(
     tabPanel(
       "Explore the Data",
       titlePanel(h1("Explore the Data")),
-      p(strong("Author:"), " Emily Schueddig | Department of Biostatistics & Data Science, University of Kansas Medical Center"),
-      p(strong("Email:"), " eschueddig@kumc.edu"),
+      p("Department of Biostatistics & Data Science | University of Kansas Medical Center"),
+      p(strong("Contact:"), " eschueddig@kumc.edu"),
       sidebarLayout(
         # Side bar ------------------------------------------------------------
         sidebarPanel(
@@ -122,7 +118,7 @@ ui <- fluidPage(
               uiOutput("dimplot_reduction_ui"),
               uiOutput("dimplot_group_ui"),
               uiOutput("dimplot_splitby_ui"),
-              plotOutput("dimplot_reduction", height = "600px") %>% withSpinner(),
+              plotlyOutput("dim_plot", height = "600px") %>% withSpinner(),
               downloadButton("download_dimplot", "Download DimPlot")
             ),
             
@@ -200,7 +196,7 @@ server <- function(input, output, session) {
       updateSelectInput(session, "assay", choices = available_assays(obj), selected = DefaultAssay(obj))
       reds <- available_reductions(obj)
       # sel_red <- if ("umap" %in% reds) "umap" else if (length(reds) > 0) reds[[1]] else NULL
-      updateSelectInput(session, "dimplot_reduction", choices = reds, selected = NULL)
+      updateSelectInput(session, "dim_plot", choices = reds, selected = NULL)
       md <- obj@meta.data
       cat_cols <- cat_meta_cols(obj)
       default_group <- if ("seurat_clusters" %in% colnames(md)) "seurat_clusters" else ""
@@ -221,13 +217,13 @@ server <- function(input, output, session) {
     req(seurat_obj())
     selectInput("dimplot_reduction", "Dimensional Reduction",
                 choices = available_reductions(seurat_obj()),
-                selected = NULL)
+                selected = "umap")
   })
   
   output$dimplot_group_ui <- renderUI({
     req(seurat_obj())
     choices <- cat_meta_cols(seurat_obj())
-    selectInput("dimplot_group", "Group by (color)", choices = choices, selected = "seurat_clusters")
+    selectInput("dimplot_group", "Color by (required)", choices = choices, selected = "orig.ident")
   })
   
   output$dimplot_splitby_ui <- renderUI({
@@ -339,19 +335,19 @@ server <- function(input, output, session) {
   })
   
   # ---- Reduction ----
-  output$dimplot_reduction <- renderPlot({
+  output$dim_plot <- renderPlotly({
     req(seurat_obj(), input$dimplot_reduction, input$dimplot_group)
     
     split_var <- if (nzchar(input$dimplot_splitby)) input$dimplot_splitby else NULL
-    
+
     p <- DimPlot(seurat_obj(),
                  reduction = input$dimplot_reduction,
                  group.by = input$dimplot_group,
                  split.by = split_var,
                  pt.size = 1, ncol=2, label = T)
-    
+
     set_last_plot(p, "dimplot_raw")
-    print(p)
+    ggplotly(p)
   })
   
   output$download_dimplot <- downloadHandler(
