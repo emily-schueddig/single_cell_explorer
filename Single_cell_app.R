@@ -150,7 +150,9 @@ ui <- fluidPage(
               plotlyOutput("gene_violin_plot") %>% withSpinner(),
               downloadButton("download_gene_violin", "Download gene violins"),
               tags$hr(),
-              DTOutput("gene_violin_summary") %>% withSpinner()
+              DTOutput("gene_violin_summary") %>% withSpinner(),
+              downloadButton("download_gene_violin_summary", "Download Summary CSV")
+              
             ),
             
             tabPanel(
@@ -166,7 +168,9 @@ ui <- fluidPage(
               plotlyOutput("filtered_violin_plot") %>% withSpinner(),
               downloadButton("download_filtered_violins", "Download violin plot"),
               tags$hr(),
-              DTOutput("filtered_violin_summary") %>% withSpinner()
+              DTOutput("filtered_violin_summary") %>% withSpinner(),
+              downloadButton("download_filtered_violin_summary", "Download Summary CSV")
+              
             )
             
           )
@@ -269,16 +273,15 @@ server <- function(input, output, session) {
     group_var <- input$violin_group
     groups <- sort(unique(obj@meta.data[[group_var]]))
     
-    flowLayout(
-      lapply(groups, function(g) {
-        colourpicker::colourInput(
-          inputId = paste0("col_", g),
-          label = paste("Color for", g),
-          value = "#1f77b4"
-        )
-      })
-    )
+    lapply(groups, function(g) {
+      colourpicker::colourInput(
+        inputId = paste0("col_", safe_id(g)),
+        label = paste("Color for", g),
+        value = "#1f77b4"
+      )
+    })
   })
+  
   
   
   # Dropdown to select variable to filter by
@@ -455,17 +458,26 @@ server <- function(input, output, session) {
     
     lapply(groups, function(g) {
       colourpicker::colourInput(
-        inputId = paste0("filtered_col_", g),
+        inputId = paste0("filtered_col_", safe_id(g)),
         label = paste("Color for", g),
         value = "#1f77b4"
       )
     })
   })
   
+  #Create valid HTML IDs
+  safe_id <- function(x) {
+    gsub("[^A-Za-z0-9_]", "_", x)
+  }
+  
+  
   # ---- Gene violins ----
   output$gene_violin_plot <- renderPlotly({
     req(seurat_obj(), nzchar(input$genes_violin), input$violin_group)
+    
     obj <- seurat_obj()
+    
+    # --- Parse genes ---
     genes <- trimws(unlist(strsplit(input$genes_violin, ",")))
     genes <- genes[genes %in% rownames(obj)]
     validate(need(length(genes) > 0, "No valid genes found"))
@@ -473,22 +485,38 @@ server <- function(input, output, session) {
     group_var <- input$violin_group
     validate(need(group_var %in% colnames(obj@meta.data), "Invalid group variable"))
     
+    # --- Build DF ---
     df <- FetchData(obj, vars = genes)
     df[[group_var]] <- obj@meta.data[[group_var]]
     
-    df_long <- tidyr::pivot_longer(df, cols = all_of(genes),
-                                   names_to = "gene", values_to = "expr")
+    df_long <- tidyr::pivot_longer(
+      df,
+      cols = all_of(genes),
+      names_to = "gene",
+      values_to = "expr"
+    )
     
-    # Collect user-selected colors
+    # --- Groups ---
     groups <- sort(unique(df_long[[group_var]]))
-    colors <- sapply(groups, function(g) input[[paste0("col_", g)]])
-    names(colors) <- groups
     
-    p <- ggplot(df_long, aes(x = .data[[group_var]], y = expr,
-                             fill = .data[[group_var]])) +
+    # --- Collect colors using SAFE IDs ---
+    gene_colors <- sapply(groups, function(g) {
+      input[[paste0("col_", safe_id(g))]]
+    })
+    
+    # --- Fallback for missing colors ---
+    gene_colors[is.na(gene_colors) | sapply(gene_colors, is.null)] <- "#1f77b4"
+    names(gene_colors) <- groups
+    
+    # --- Plot ---
+    p <- ggplot(df_long, aes(
+      x = .data[[group_var]],
+      y = expr,
+      fill = .data[[group_var]]
+    )) +
       geom_violin(scale = "width") +
       facet_wrap(~ gene, scales = "free_y") +
-      scale_fill_manual(values = colors) +
+      scale_fill_manual(values = gene_colors) +
       labs(
         title = input$gene_violin_title,
         x = input$gene_violin_xlab,
@@ -502,6 +530,79 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
   
+  #summary table
+  output$gene_violin_summary <- renderDT({
+    req(seurat_obj(), nzchar(input$genes_violin), input$violin_group)
+    
+    obj <- seurat_obj()
+    genes <- trimws(unlist(strsplit(input$genes_violin, ",")))
+    genes <- genes[genes %in% rownames(obj)]
+    validate(need(length(genes) > 0, "No valid genes found"))
+    
+    group_var <- input$violin_group
+    df <- FetchData(obj, vars = genes)
+    df[[group_var]] <- obj@meta.data[[group_var]]
+    
+    df_long <- tidyr::pivot_longer(
+      df,
+      cols = all_of(genes),
+      names_to = "gene",
+      values_to = "expr"
+    )
+    
+    output$download_gene_violin_summary <- downloadHandler(
+      filename = function() {
+        paste0("gene_violin_summary_", Sys.Date(), ".csv")
+      },
+      content = function(file) {
+        obj <- seurat_obj()
+        genes <- trimws(unlist(strsplit(input$genes_violin, ",")))
+        genes <- genes[genes %in% rownames(obj)]
+        
+        group_var <- input$violin_group
+        df <- FetchData(obj, vars = genes)
+        df[[group_var]] <- obj@meta.data[[group_var]]
+        
+        df_long <- tidyr::pivot_longer(
+          df,
+          cols = all_of(genes),
+          names_to = "gene",
+          values_to = "expr"
+        )
+        
+        summary_df <- df_long %>%
+          dplyr::group_by(gene, .data[[group_var]]) %>%
+          dplyr::summarise(
+            n = dplyr::n(),
+            mean = mean(expr, na.rm = TRUE),
+            median = median(expr, na.rm = TRUE),
+            sd = sd(expr, na.rm = TRUE),
+            min = min(expr, na.rm = TRUE),
+            max = max(expr, na.rm = TRUE),
+            .groups = "drop"
+          )
+        
+        write.csv(summary_df, file, row.names = FALSE)
+      }
+    )
+    
+    
+    summary_df <- df_long %>%
+      dplyr::group_by(gene, .data[[group_var]]) %>%
+      dplyr::summarise(
+        n = dplyr::n(),
+        mean = mean(expr, na.rm = TRUE),
+        median = median(expr, na.rm = TRUE),
+        sd = sd(expr, na.rm = TRUE),
+        min = min(expr, na.rm = TRUE),
+        max = max(expr, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    datatable(summary_df, options = list(pageLength = 10))
+  })
+  
+  
   output$download_gene_violin <- downloadHandler(
     filename = function() sprintf("gene_violins_%s.png", Sys.Date()),
     content = function(file) {
@@ -509,6 +610,11 @@ server <- function(input, output, session) {
              width = 8, height = 6, dpi = 300)
     }
   )
+  
+  #Create valid HTML IDs
+  safe_id <- function(x) {
+    gsub("[^A-Za-z0-9_]", "_", x)
+  }
   
   
   # ---- Filtered Gene violins ----
@@ -521,30 +627,47 @@ server <- function(input, output, session) {
   output$filtered_violin_plot <- renderPlotly({
     req(seurat_obj(), input$filtered_genes, input$filtered_violin_group)
     
+    # --- Parse genes ---
     genes <- trimws(unlist(strsplit(input$filtered_genes, ",")))
     genes <- genes[genes %in% rownames(seurat_obj())]
     validate(need(length(genes) > 0, "No valid genes entered"))
     
+    # --- Filter object ---
     cells_to_keep <- rownames(filtered_metadata())
     obj_filtered <- subset(seurat_obj(), cells = cells_to_keep)
     
+    # --- Build long DF ---
     df <- FetchData(obj_filtered, vars = genes)
     df[[input$filtered_violin_group]] <- obj_filtered@meta.data[[input$filtered_violin_group]]
     
-    df_long <- tidyr::pivot_longer(df, cols = all_of(genes),
-                                   names_to = "gene", values_to = "expr")
+    df_long <- tidyr::pivot_longer(
+      df,
+      cols = all_of(genes),
+      names_to = "gene",
+      values_to = "expr"
+    )
     
-    # Collect user-selected colors
+    # --- Groups ---
     groups <- sort(unique(df_long[[input$filtered_violin_group]]))
-    colors <- sapply(groups, function(g) input[[paste0("filtered_col_", g)]])
-    names(colors) <- groups
     
-    p <- ggplot(df_long, aes(x = .data[[input$filtered_violin_group]],
-                             y = expr,
-                             fill = .data[[input$filtered_violin_group]])) +
+    # --- Collect colors using SAFE IDs ---
+    group_colors <- sapply(groups, function(g) {
+      input[[paste0("filtered_col_", safe_id(g))]]
+    })
+    
+    # --- Fallback for missing colors ---
+    group_colors[is.na(group_colors) | sapply(group_colors, is.null)] <- "#1f77b4"
+    names(group_colors) <- groups
+    
+    # --- Plot ---
+    p <- ggplot(df_long, aes(
+      x = .data[[input$filtered_violin_group]],
+      y = expr,
+      fill = .data[[input$filtered_violin_group]]
+    )) +
       geom_violin(scale = "width") +
       facet_wrap(~ gene, scales = "free_y") +
-      scale_fill_manual(values = colors) +
+      scale_fill_manual(values = group_colors) +
       labs(
         title = input$filtered_violin_title,
         x = input$filtered_violin_xlab,
@@ -557,6 +680,83 @@ server <- function(input, output, session) {
     set_last_plot(p, "filtered_violin_raw")
     ggplotly(p)
   })
+  
+ #summary table
+  output$filtered_violin_summary <- renderDT({
+    req(seurat_obj(), input$filtered_genes, input$filtered_violin_group)
+    
+    genes <- trimws(unlist(strsplit(input$filtered_genes, ",")))
+    genes <- genes[genes %in% rownames(seurat_obj())]
+    validate(need(length(genes) > 0, "No valid genes entered"))
+    
+    cells_to_keep <- rownames(filtered_metadata())
+    obj_filtered <- subset(seurat_obj(), cells = cells_to_keep)
+    
+    group_var <- input$filtered_violin_group
+    
+    df <- FetchData(obj_filtered, vars = genes)
+    df[[group_var]] <- obj_filtered@meta.data[[group_var]]
+    
+    df_long <- tidyr::pivot_longer(
+      df,
+      cols = all_of(genes),
+      names_to = "gene",
+      values_to = "expr"
+    )
+    
+    summary_df <- df_long %>%
+      dplyr::group_by(gene, .data[[group_var]]) %>%
+      dplyr::summarise(
+        n = dplyr::n(),
+        mean = mean(expr, na.rm = TRUE),
+        median = median(expr, na.rm = TRUE),
+        sd = sd(expr, na.rm = TRUE),
+        min = min(expr, na.rm = TRUE),
+        max = max(expr, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    datatable(summary_df, options = list(pageLength = 10))
+  })
+  
+  output$download_filtered_violin_summary <- downloadHandler(
+    filename = function() {
+      paste0("filtered_gene_violin_summary_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      genes <- trimws(unlist(strsplit(input$filtered_genes, ",")))
+      genes <- genes[genes %in% rownames(seurat_obj())]
+      
+      cells_to_keep <- rownames(filtered_metadata())
+      obj_filtered <- subset(seurat_obj(), cells = cells_to_keep)
+      
+      group_var <- input$filtered_violin_group
+      df <- FetchData(obj_filtered, vars = genes)
+      df[[group_var]] <- obj_filtered@meta.data[[group_var]]
+      
+      df_long <- tidyr::pivot_longer(
+        df,
+        cols = all_of(genes),
+        names_to = "gene",
+        values_to = "expr"
+      )
+      
+      summary_df <- df_long %>%
+        dplyr::group_by(gene, .data[[group_var]]) %>%
+        dplyr::summarise(
+          n = dplyr::n(),
+          mean = mean(expr, na.rm = TRUE),
+          median = median(expr, na.rm = TRUE),
+          sd = sd(expr, na.rm = TRUE),
+          min = min(expr, na.rm = TRUE),
+          max = max(expr, na.rm = TRUE),
+          .groups = "drop"
+        )
+      
+      write.csv(summary_df, file, row.names = FALSE)
+    }
+  )
+  
   
   # Download handler
   output$download_filtered_violins <- downloadHandler(
