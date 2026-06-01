@@ -82,6 +82,7 @@ ui <- fluidPage(
       "Explore the Data",
       titlePanel(h1("Explore the Data")),
       p("Department of Biostatistics & Data Science | University of Kansas Medical Center"),
+      p(strong("Created by:"), " Emily Schueddig & Allison  Makovec"),
       p(strong("Contact:"), " eschueddig@kumc.edu"),
       sidebarLayout(
         # Side bar ------------------------------------------------------------
@@ -179,7 +180,11 @@ ui <- fluidPage(
     ),
     tabPanel(
       "Analyze the Data",
-      titlePanel(h1("Analyze the Data"))
+      titlePanel(h1("Analyze the Data")),
+      p("Department of Biostatistics & Data Science | University of Kansas Medical Center"),
+      p(strong("Created by:"), " Emily Schueddig & Allison  Makovec"),
+      p(strong("Contact:"), " eschueddig@kumc.edu"),
+      p(em("Under development... Coming soon..."))
     )
   )
 )
